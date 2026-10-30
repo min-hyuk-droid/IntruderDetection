@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 대화상자 배경: 카드와 같은 어두운 표면 + 둥근 모서리 -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:inset="16dp">
+    <shape android:shape="rectangle">
+        <solid android:color="@color/surface" />
+        <corners android:radius="20dp" />
+    </shape>
+</inset>

@@ -1,0 +1,12 @@
+{% extends 'blog/base.html' %}
+
+{% block content %}
+<section class="detail">
+    <h1>{% if form.instance.pk %}글 수정{% else %}새 글 쓰기{% endif %}</h1>
+    <form method="POST" class="post-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="save btn-yellow">저장</button>
+    </form>
+</section>
+{% endblock %}

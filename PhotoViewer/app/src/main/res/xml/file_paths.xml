@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 카메라 촬영 사진 임시 저장 위치: 앱 캐시의 camera/ 폴더 -->
+<paths>
+    <cache-path
+        name="camera"
+        path="camera/" />
+</paths>

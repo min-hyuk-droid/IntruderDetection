@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">PhotoViewer</string>
+    <string name="sync">동기화</string>
+    <string name="upload">새로운 이미지 게시</string>
+    <string name="search_hint">제목, 내용 검색</string>
+    <string name="search">검색</string>
+</resources>

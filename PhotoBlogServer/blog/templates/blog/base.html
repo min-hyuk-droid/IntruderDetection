@@ -1,0 +1,26 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Photo blog</title>
+    <link rel="icon" href="{% static 'images/favicon.png' %}">
+    <link rel="stylesheet" href="{% static 'css/blog.css' %}?v=4">
+</head>
+<body>
+    <header class="topbar">
+        <a class="brand" href="/">
+            <img src="{% static 'images/logo.png' %}" alt="" class="brand-logo">
+            <span>Photo blog</span>
+        </a>
+        {% if user.is_authenticated %}
+        <a href="{% url 'post_new' %}" class="btn-yellow">+ 새 글 쓰기</a>
+        {% endif %}
+    </header>
+    <main class="content">
+        {% block content %}
+        {% endblock %}
+    </main>
+</body>
+</html>

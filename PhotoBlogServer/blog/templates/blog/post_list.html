@@ -1,0 +1,16 @@
+{% extends 'blog/base.html' %}
+
+{% block content %}
+<div class="grid">
+    {% for post in posts %}
+    <a class="card" href="{% url 'post_detail' pk=post.pk %}">
+        <!-- blog image -->
+        <img src="{{ post.image.url }}" class="card-image blog-image-list" alt="{{ post.title }}">
+        <div class="card-title">{{ post.title }}</div>
+        <div class="date">{{ post.published_date|date:"Y-m-d H:i" }}</div>
+    </a>
+    {% empty %}
+    <p class="empty">아직 게시물이 없습니다.</p>
+    {% endfor %}
+</div>
+{% endblock %}

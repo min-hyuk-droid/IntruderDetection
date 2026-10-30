@@ -1,0 +1,17 @@
+{
+    // 강의자료 ch08 7p: 디버깅용 실행 설정 (detect.py 를 웹캠(0)으로 실행)
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/detect.py",
+            "args": [
+                "--source", "0"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

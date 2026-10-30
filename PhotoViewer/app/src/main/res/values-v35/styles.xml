@@ -1,0 +1,7 @@
+<resources>
+    <!-- Android 15(targetSdk 35)의 강제 edge-to-edge 를 끄고 상태바 아래부터 화면을 그림 -->
+    <style name="AppTheme" parent="AppTheme.Base">
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+    </style>
+</resources>

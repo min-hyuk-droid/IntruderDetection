@@ -1,0 +1,6 @@
+<resources>
+    <!-- Android 8.1+ : 밝은 내비게이션 바(어두운 아이콘) -->
+    <style name="AppTheme" parent="AppTheme.Base">
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

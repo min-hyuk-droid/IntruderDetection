@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 크림 배경 + 흰 카드 + 아이콘의 노랑(버튼)·검정(글자) -->
+<resources>
+    <color name="brand_black">#17161D</color>
+    <color name="brand_yellow">#FFB020</color>
+    <color name="background">#FFF8E7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F4EEDF</color>
+    <color name="outline">#D9D1BF</color>
+    <color name="yellow_container">#FFE2A0</color>
+    <color name="text_primary">#17161D</color>
+    <color name="text_secondary">#7A7468</color>
+    <!-- 흰 배경 위 글자로 쓸 진한 노랑(주황) - 대화상자 버튼, 링크 -->
+    <color name="accent_text">#C77800</color>
+    <color name="error">#D93B3B</color>
+</resources>
