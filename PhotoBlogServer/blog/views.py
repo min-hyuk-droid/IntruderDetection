@@ -5,6 +5,8 @@ from django.contrib.auth.decorators import login_required
 from .models import Post
 from .forms import PostForm
 from rest_framework import viewsets, filters, permissions
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.throttling import AnonRateThrottle
 from .serializers import PostSerializer
 from .permissions import IsAuthorOrReadOnly
 
@@ -51,6 +53,15 @@ def post_edit(request, pk):
 
 def js_test(request):
     return render(request, 'blog/js_test.html', {})
+
+class LoginRateThrottle(AnonRateThrottle):
+    scope = 'login'
+
+
+class ThrottledAuthToken(ObtainAuthToken):
+    # [편의기능 보안] /api-token-auth/ 로그인 시도 제한 (settings.py 의 login 비율, 초과하면 429)
+    throttle_classes = [LoginRateThrottle]
+
 
 class BlogImages(viewsets.ModelViewSet):
     # 최신 게시물이 먼저 오도록 정렬 (앱 목록 상단 = 최신 글)

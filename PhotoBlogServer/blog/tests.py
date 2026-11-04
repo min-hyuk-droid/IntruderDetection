@@ -10,6 +10,7 @@ import tempfile
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.files.storage import default_storage
 from django.core.management import call_command
@@ -22,6 +23,7 @@ from rest_framework.test import APIClient
 
 from . import api_engine
 from .models import DEFAULT_IMAGE, Post
+from .serializers import MAX_IMAGE_BYTES
 
 API_URL = '/api_root/Post/'
 MEDIA_ROOT = tempfile.mkdtemp()
@@ -311,6 +313,15 @@ class CreateAppUserCommandTest(TestCase):
         call_command('create_app_user', stdout=out2, stderr=io.StringIO())
         self.assertEqual(out.getvalue(), out2.getvalue())
 
+    def test_rerun_keeps_password_set_later(self):
+        call_command('create_app_user', stdout=io.StringIO(), stderr=io.StringIO())
+        user = User.objects.get(username='photoviewer')
+        user.set_password('pw-12345')
+        user.save()
+        call_command('create_app_user', stdout=io.StringIO(), stderr=io.StringIO())
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('pw-12345'))
+
     def test_app_user_cannot_delete_admin_post(self):
         admin = User.objects.create_superuser('admin2', password='pw-12345')
         post = Post.objects.create(author=admin, title='관리자 글', text='x', published_date=timezone.now())
@@ -318,6 +329,64 @@ class CreateAppUserCommandTest(TestCase):
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION='Token ' + Token.objects.get(user__username='appuser').key)
         self.assertEqual(client.delete(f'{API_URL}{post.pk}/').status_code, 403)
+
+
+class LoginThrottleTest(TestCase):
+    """[편의기능 보안] 로그인은 1분에 5번까지, 6번째부터 429 (맞는 비밀번호여도 거절)"""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        User.objects.create_user('kiok', password='pw-12345')
+
+    def login(self, password, **extra):
+        return self.client.post('/api-token-auth/', {'username': 'kiok', 'password': password}, **extra)
+
+    def test_sixth_attempt_is_blocked(self):
+        for _ in range(5):
+            self.assertEqual(self.login('wrong').status_code, 400)
+        self.assertEqual(self.login('wrong').status_code, 429)
+        self.assertEqual(self.login('pw-12345').status_code, 429)
+
+    def test_correct_password_returns_token(self):
+        res = self.login('pw-12345')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['token'], Token.objects.get(user__username='kiok').key)
+
+    def test_forged_forwarded_header_does_not_bypass(self):
+        for i in range(5):
+            self.login('wrong', HTTP_X_FORWARDED_FOR=f'1.2.3.{i}, 9.9.9.9')
+        self.assertEqual(self.login('wrong', HTTP_X_FORWARDED_FOR='8.8.8.8, 9.9.9.9').status_code, 429)
+
+
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class UploadValidationTest(MediaTestMixin, TestCase):
+    """[편의기능 보안] 사진이 아니거나 5MB 를 넘는 파일은 400, 게시물이 만들어지지 않음"""
+
+    def setUp(self):
+        user = User.objects.create_user('kiok', password='pw-12345')
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION='JWT ' + Token.objects.create(user=user).key)
+
+    def post_image(self, image):
+        return self.client.post(API_URL, {'title': 't', 'text': 'x', 'image': image}, format='multipart')
+
+    def test_not_an_image(self):
+        res = self.post_image(SimpleUploadedFile('virus.jpg', b'not an image', content_type='image/jpeg'))
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('image', res.json())
+        self.assertEqual(Post.objects.count(), 0)
+
+    def test_too_large(self):
+        with mock.patch('blog.serializers.MAX_IMAGE_BYTES', 10):
+            res = self.post_image(make_image())
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('5MB', res.json()['image'][0])
+        self.assertEqual(Post.objects.count(), 0)
+
+    def test_normal_image(self):
+        self.assertEqual(self.post_image(make_image()).status_code, 201)
+        self.assertLess(make_image().size, MAX_IMAGE_BYTES)
 
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)

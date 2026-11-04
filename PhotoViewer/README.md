@@ -4,13 +4,9 @@
 
 ## 설정
 
-서버 주소와 토큰은 git 에 올리지 않는 `secrets.properties` 에서 읽어 `BuildConfig` 로 들어간다.
+별도 설정 없이 빌드된다. 서버 주소만 `app/build.gradle` 에 있고, 토큰은 앱에 넣지 않는다. 글 올리기·삭제를 할 때 앱에서 로그인하면 토큰을 받는다.
 
-```bash
-cp secrets.properties.example secrets.properties
-# LOCAL_TOKEN / REMOTE_URL / REMOTE_TOKEN 입력
-# 토큰 발급(서버): python manage.py drf_create_token <username>
-```
+로그인할 사용자의 비밀번호는 서버에서 정한다: `python manage.py changepassword photoviewer`
 
 ## 빌드 / 실행
 
@@ -34,15 +30,21 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | *(편의)* 길게 눌러 삭제 | 확인 다이얼로그 → `DELETE /api_root/Post/{id}/` (서버는 작성자만 허용, 403 안내) |
 | *(편의)* 자동 동기화 / 당겨서 새로고침 | 앱을 켜면 바로 동기화, 목록을 아래로 당기면 다시 받아옴 (`SwipeRefreshLayout`) |
 | 서버 선택 | 로컬(`http://10.0.2.2:8000`) ↔ 클라우드(PythonAnywhere) 스피너, 선택 값 저장, 바꾸면 바로 동기화 |
+| *(공통평가02 편의 ①)* 온디바이스 객체 인식 | 게시 화면에서 사진을 고르면 앱에 든 YOLOv5n(`assets/yolov5n.onnx`, onnxruntime-android)으로 기기 안에서 인식: 박스 표시, 인식 시간·물체 수 표시, 빈 제목·내용 자동 입력. 사진을 서버로 보내지 않고 인터넷 없이 동작 |
+| *(공통평가02 편의 ②)* 로그인·토큰 보호 | `POST /api-token-auth/` 로그인 → 토큰을 Android Keystore 키(AES-GCM)로 암호화해 저장(`SecureTokenStore`), 비밀번호는 저장하지 않음. 조회는 로그인 없이 가능, 글 올리기·삭제는 로그인 필요, 로그아웃하면 토큰 삭제, 서버 응답 400·429 안내 |
+
+모델 다시 만들기 (YOLOv5 폴더): `pip install onnx onnxscript` 후 `python export.py --weights yolov5n.pt --include onnx --imgsz 320`, 나온 파일을 `app/src/main/assets/` 로 복사.
 
 화면: 크림 배경 + 아이콘의 노랑·검정, 글꼴 Jua ([OFL](licenses/Jua-OFL.txt)), 동기화·게시 버튼은 화면 아래.
 
-단위 테스트: `./gradlew testDebugUnitTest` ([`PostTest.java`](app/src/test/java/com/example/photoviewer/PostTest.java), 6개)
+단위 테스트: `./gradlew testDebugUnitTest` ([`PostTest.java`](app/src/test/java/com/example/photoviewer/PostTest.java) 6개, [`YoloPostprocessTest.java`](app/src/test/java/com/example/photoviewer/YoloPostprocessTest.java) 8개)
 
 ## 주요 파일
 
 - [`MainActivity.java`](app/src/main/java/com/example/photoviewer/MainActivity.java) — 동기화/자동 동기화·당겨서 새로고침/업로드/검색/삭제/서버 선택
 - [`ImageAdapter.java`](app/src/main/java/com/example/photoviewer/ImageAdapter.java) — RecyclerView 어댑터
 - [`Post.java`](app/src/main/java/com/example/photoviewer/Post.java) — 게시물 JSON 모델
+- [`YoloDetector.java`](app/src/main/java/com/example/photoviewer/YoloDetector.java), [`YoloPostprocess.java`](app/src/main/java/com/example/photoviewer/YoloPostprocess.java) — 온디바이스 추론, 신뢰도 필터·NMS
+- [`SecureTokenStore.java`](app/src/main/java/com/example/photoviewer/SecureTokenStore.java) — 토큰 암호화 저장
 - [`AndroidManifest.xml`](app/src/main/AndroidManifest.xml), [`network_security_config.xml`](app/src/main/res/xml/network_security_config.xml) — 강의자료 12p 의 권한 4개(INTERNET, WRITE/READ/MANAGE_EXTERNAL_STORAGE), 평문(HTTP) 통신 허용(13p), 카메라용 FileProvider
 - [`activity_main.xml`](app/src/main/res/layout/activity_main.xml), [`item_image.xml`](app/src/main/res/layout/item_image.xml), [`dialog_upload.xml`](app/src/main/res/layout/dialog_upload.xml)

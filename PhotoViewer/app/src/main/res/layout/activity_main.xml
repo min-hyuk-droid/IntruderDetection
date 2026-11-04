@@ -41,6 +41,19 @@
             android:text="@string/search" />
     </LinearLayout>
 
+    <!-- [편의기능 보안] 로그인 상태: 누르면 로그인 / 로그아웃 -->
+    <TextView
+        android:id="@+id/textAccount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:focusable="true"
+        android:onClick="onClickAccount"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="@color/accent_text"
+        android:textSize="14sp" />
+
     <TextView
         android:id="@+id/textView"
         android:layout_width="match_parent"

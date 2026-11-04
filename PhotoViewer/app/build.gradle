@@ -2,14 +2,6 @@ plugins {
     id 'com.android.application'
 }
 
-// 서버 주소/토큰은 git 에 올리지 않는 secrets.properties 에서 읽어 BuildConfig 로 넣는다
-def secrets = new Properties()
-def secretsFile = rootProject.file('secrets.properties')
-if (secretsFile.exists()) {
-    secretsFile.withInputStream { secrets.load(it) }
-}
-def secret = { String key, String fallback -> '"' + secrets.getProperty(key, fallback) + '"' }
-
 android {
     namespace 'com.example.photoviewer'
     compileSdk 35
@@ -21,10 +13,14 @@ android {
         versionCode 1
         versionName '1.0'
 
-        buildConfigField 'String', 'LOCAL_URL', secret('LOCAL_URL', 'http://10.0.2.2:8000')
-        buildConfigField 'String', 'LOCAL_TOKEN', secret('LOCAL_TOKEN', '')
-        buildConfigField 'String', 'REMOTE_URL', secret('REMOTE_URL', '')
-        buildConfigField 'String', 'REMOTE_TOKEN', secret('REMOTE_TOKEN', '')
+        // 서버 주소만 넣는다. 토큰은 앱에 넣지 않고 로그인으로 받는다 (SecureTokenStore)
+        buildConfigField 'String', 'LOCAL_URL', '"http://10.0.2.2:8000"'  // 에뮬레이터에서 PC 의 127.0.0.1
+        buildConfigField 'String', 'REMOTE_URL', '"https://sungmh.pythonanywhere.com"'
+
+        // 온디바이스 인식 라이브러리: 휴대폰(arm64)과 에뮬레이터(x86_64)만 포함해 APK 크기를 줄임
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
     }
 
     buildFeatures {
@@ -42,6 +38,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.31.1'  // [편의기능] 온디바이스 YOLOv5 실행
     testImplementation 'junit:junit:4.13.2'
     // 단위 테스트(JVM)에서는 안드로이드의 org.json 이 비어 있으므로 실제 구현을 넣음
     testImplementation 'org.json:json:20260814'

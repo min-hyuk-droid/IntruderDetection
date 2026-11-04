@@ -139,6 +139,10 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
     # 강의자료(9p)처럼 GET 응답을 JSON Array로 반환하기 위해 페이지네이션은 사용하지 않음
+    # [편의기능 보안] 로그인 시도 제한: 같은 IP 에서 1분에 5번을 넘으면 429 (비밀번호 무차별 대입 방지)
+    'DEFAULT_THROTTLE_RATES': {'login': '5/min'},
+    # 프록시(PythonAnywhere) 뒤에서도 클라이언트 IP 로 세고, X-Forwarded-For 위조로 제한을 피하지 못하게 함
+    'NUM_PROXIES': 1,
 }
 # 웹 화면 글쓰기/수정은 로그인 필요 → 관리자 로그인 페이지로 이동
 LOGIN_URL = '/admin/login/'

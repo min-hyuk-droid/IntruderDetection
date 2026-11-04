@@ -3,7 +3,10 @@ package com.example.photoviewer;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -71,13 +74,16 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     CloadImage taskDownload;
     PutPost taskUpload;
 
-    // 서버 주소/토큰은 git 에 올리지 않는 secrets.properties → BuildConfig 로 주입
-    String token = BuildConfig.LOCAL_TOKEN;
+    // [편의기능 보안] 토큰은 앱에 넣지 않고, 로그인으로 받아 Keystore 로 암호화해 저장한 것을 읽어 씀
+    String token = "";
+    private SecureTokenStore tokenStore;
+    private TextView textAccount;
 
     // [편의기능] 서버 선택: 0 = 로컬(에뮬레이터 → PC), 1 = PythonAnywhere 클라우드
     private static final String[] SERVER_NAMES = {"로컬", "클라우드"};
     private static final String[] SERVER_URLS = {BuildConfig.LOCAL_URL, BuildConfig.REMOTE_URL};
-    private static final String[] SERVER_TOKENS = {BuildConfig.LOCAL_TOKEN, BuildConfig.REMOTE_TOKEN};
+    private static final String[] SERVER_KEYS = {"local", "cloud"};
+    private int serverIndex = 0;
     private static final String PREF_SERVER = "server";
     private SharedPreferences prefs;
     private SwipeRefreshLayout swipeRefresh;
@@ -95,6 +101,10 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     // Upload 화면에서 선택한 이미지
     private Uri selectedImageUri;
     private ImageView uploadPreview;
+    // [편의기능] 온디바이스 인식 결과 표시·자동 입력 대상 (게시 화면이 열려 있을 때만 값이 있음)
+    private TextView uploadDetectResult;
+    private EditText uploadTitle;
+    private EditText uploadText;
     private ActivityResultLauncher<PickVisualMediaRequest> pickImage;
     // [편의기능] 카메라로 찍어서 바로 게시
     private ActivityResultLauncher<Uri> takePhoto;
@@ -107,6 +117,8 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         //imgView = (ImageView) findViewById(R.id.imgView);
         textView = (TextView) findViewById(R.id.textView);
         editSearch = findViewById(R.id.editSearch);
+        textAccount = findViewById(R.id.textAccount);
+        tokenStore = new SecureTokenStore(this);
 
         // 이미지 선택 (Android Photo Picker, 저장소 권한 없이 사용 가능)
         pickImage = registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
@@ -114,6 +126,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 selectedImageUri = uri;
                 if (uploadPreview != null) {
                     uploadPreview.setImageURI(uri);
+                    new DetectImage(uri).execute();
                 }
             }
         });
@@ -125,6 +138,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 if (uploadPreview != null) {
                     uploadPreview.setImageURI(null);
                     uploadPreview.setImageURI(cameraPhotoUri);
+                    new DetectImage(cameraPhotoUri).execute();
                 }
             }
         });
@@ -178,10 +192,10 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         int saved = prefs.getInt(PREF_SERVER, 0);
         if (saved < SERVER_URLS.length && !TextUtils.isEmpty(SERVER_URLS[saved])) {
             site_url = SERVER_URLS[saved];
-            token = SERVER_TOKENS[saved];
         } else {
             saved = 0;
         }
+        useServer(saved);
         spinner.setSelection(saved);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
@@ -194,7 +208,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 }
                 boolean changed = !SERVER_URLS[position].equals(site_url);
                 site_url = SERVER_URLS[position];
-                token = SERVER_TOKENS[position];
+                useServer(position);
                 prefs.edit().putInt(PREF_SERVER, position).apply();
                 if (changed) {
                     // 이전 서버의 목록은 지우고(실패해도 다른 서버 글이 남아 보이지 않게) 바로 새 서버로 동기화
@@ -207,6 +221,142 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+    }
+
+    /** 서버마다 로그인을 따로 관리: 고른 서버의 토큰을 복호화해서 읽음 */
+    private void useServer(int index) {
+        serverIndex = index;
+        token = tokenStore.load(SERVER_KEYS[index]);
+        updateAccountText();
+    }
+
+    private void updateAccountText() {
+        String name = prefs.getString("user_" + SERVER_KEYS[serverIndex], "");
+        textAccount.setText(TextUtils.isEmpty(token) ? "로그인 안 됨 (조회만 가능) | 눌러서 로그인"
+                : name + " 로그인됨 | 눌러서 로그아웃");
+    }
+
+    // ------------------------------------------------------------------ [편의기능 보안] 로그인 / 로그아웃
+
+    public void onClickAccount(View v) {
+        if (TextUtils.isEmpty(token)) {
+            showLogin(null);
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("로그아웃")
+                .setMessage("저장된 토큰을 지웁니다. 글 올리기·삭제는 다시 로그인해야 합니다.")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("로그아웃", (d, w) -> logout())
+                .show();
+    }
+
+    private void logout() {
+        tokenStore.clear(SERVER_KEYS[serverIndex]);
+        token = "";
+        updateAccountText();
+    }
+
+    /** @param afterLogin 로그인 성공 뒤 이어서 할 일 (글 올리기·삭제), 없으면 null */
+    private void showLogin(Runnable afterLogin) {
+        View form = getLayoutInflater().inflate(R.layout.dialog_login, null);
+        EditText editUsername = form.findViewById(R.id.editUsername);
+        EditText editPassword = form.findViewById(R.id.editPassword);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("로그인 (" + SERVER_NAMES[serverIndex] + " 서버)")
+                .setView(form)
+                .setNegativeButton("취소", null)
+                .setPositiveButton("로그인", null)
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
+            String username = editUsername.getText().toString().trim();
+            String password = editPassword.getText().toString();
+            if (username.isEmpty()) {
+                editUsername.setError("아이디를 입력하세요");
+                editUsername.requestFocus();
+                return;
+            }
+            if (password.isEmpty()) {
+                editPassword.setError("비밀번호를 입력하세요");
+                editPassword.requestFocus();
+                return;
+            }
+            new LoginTask(dialog, editPassword, afterLogin).execute(username, password);
+        }));
+        dialog.show();
+    }
+
+    /** POST /api-token-auth/ → 받은 토큰을 암호화 저장. 비밀번호 자체는 어디에도 저장하지 않음 */
+    private class LoginTask extends AsyncTask<String, Void, Void> {
+        private final AlertDialog dialog;
+        private final EditText passwordInput;
+        private final Runnable afterLogin;
+        private String username;
+        private int responseCode = -1;
+        private String newToken;
+
+        LoginTask(AlertDialog dialog, EditText passwordInput, Runnable afterLogin) {
+            this.dialog = dialog;
+            this.passwordInput = passwordInput;
+            this.afterLogin = afterLogin;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+        }
+
+        @Override
+        protected Void doInBackground(String... params) {
+            username = params[0];
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL(site_url + "/api-token-auth/").openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+                conn.setReadTimeout(READ_TIMEOUT_MS);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                String form = "username=" + URLEncoder.encode(params[0], StandardCharsets.UTF_8)
+                        + "&password=" + URLEncoder.encode(params[1], StandardCharsets.UTF_8);
+                try (DataOutputStream out = new DataOutputStream(conn.getOutputStream())) {
+                    out.write(form.getBytes(StandardCharsets.UTF_8));
+                }
+                responseCode = conn.getResponseCode();
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    try (InputStream in = conn.getInputStream()) {
+                        newToken = new JSONObject(new String(readAll(in), StandardCharsets.UTF_8)).getString("token");
+                    }
+                }
+            } catch (IOException | JSONException e) {
+                e.printStackTrace();
+                responseCode = -1;
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void unused) {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+            if (newToken != null && tokenStore.save(SERVER_KEYS[serverIndex], newToken)) {
+                token = newToken;
+                prefs.edit().putString("user_" + SERVER_KEYS[serverIndex], username).apply();
+                updateAccountText();
+                dialog.dismiss();
+                Toast.makeText(MainActivity.this, username + " 로그인 완료", Toast.LENGTH_SHORT).show();
+                if (afterLogin != null) {
+                    afterLogin.run();
+                }
+            } else if (responseCode == HttpURLConnection.HTTP_BAD_REQUEST) {
+                passwordInput.setError("아이디 또는 비밀번호가 틀렸습니다");
+                passwordInput.requestFocus();
+            } else if (responseCode == 429) {
+                passwordInput.setError("로그인 시도가 너무 많습니다. 1분 뒤 다시 시도하세요 (429)");
+                passwordInput.requestFocus();
+            } else {
+                passwordInput.setError("서버에 연결할 수 없습니다 (" + site_url + ")");
+            }
+        }
     }
 
     // ------------------------------------------------------------------ 동기화 (강의자료 20~23p)
@@ -261,10 +411,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 String apiUrl = urls[0];
                 URL urlAPI = new URL(apiUrl);
                 HttpURLConnection conn = (HttpURLConnection) urlAPI.openConnection();
-                if (!TextUtils.isEmpty(token)) {  // 토큰이 없으면(조회만) 헤더를 보내지 않음
-                    conn.setRequestProperty("Authorization", "Token " + token);
-                }
-                conn.setRequestMethod("GET");
+                conn.setRequestMethod("GET");  // 목록 조회는 로그인 없이 가능
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 int responseCode = conn.getResponseCode();
@@ -363,7 +510,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     /** Upload (Post 에 따른 UI 제공): Post 의 title / text / image 를 입력받아 PutPost 로 게시 */
     public void onClickUpload(View v) {
         if (TextUtils.isEmpty(token)) {
-            Toast.makeText(this, "업로드에는 토큰이 필요합니다 (secrets.properties)", Toast.LENGTH_LONG).show();
+            showLogin(() -> onClickUpload(v));  // 글 올리기는 로그인이 필요: 로그인 후 게시 화면으로
             return;
         }
         View form = getLayoutInflater().inflate(R.layout.dialog_upload, null);
@@ -371,6 +518,9 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         EditText editText = form.findViewById(R.id.editText);
         Button btnPick = form.findViewById(R.id.btnPickImage);
         uploadPreview = form.findViewById(R.id.imagePreview);
+        uploadDetectResult = form.findViewById(R.id.textDetectResult);
+        uploadTitle = editTitle;
+        uploadText = editText;
         selectedImageUri = null;
         btnPick.setOnClickListener(b -> pickImage.launch(new PickVisualMediaRequest.Builder()
                 .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
@@ -384,6 +534,12 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 .setNegativeButton("취소", null)
                 .setPositiveButton("게시", null)
                 .create();
+        dialog.setOnDismissListener(d -> {
+            uploadPreview = null;
+            uploadDetectResult = null;
+            uploadTitle = null;
+            uploadText = null;
+        });
         // 바깥을 잘못 눌러도 입력한 제목·내용·사진이 사라지지 않게 함 (취소 버튼·뒤로가기로만 닫힘)
         dialog.setCanceledOnTouchOutside(false);
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(b -> {
@@ -534,6 +690,11 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 Toast.makeText(MainActivity.this, "게시 완료: " + title, Toast.LENGTH_LONG).show();
                 setStatus(null);  // 업로드 끝 → "업로드 중..." 안내 지움
                 onClickDownload(null); // 목록 다시 동기화
+            } else if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                setUploading(false);
+                setStatus(null);
+                logout();  // 서버에서 무효가 된 토큰은 지우고 다시 로그인
+                showLogin(null);
             } else {
                 setUploading(false);
                 showFieldErrors();
@@ -558,6 +719,90 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
             e.printStackTrace();
             Toast.makeText(this, "카메라를 실행할 수 없습니다: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    // ------------------------------------------------------------------ [편의기능] 온디바이스 객체 인식
+
+    /** 고른 사진을 기기 안의 YOLOv5n 으로 인식해 미리보기에 박스를 그리고, 비어 있는 제목·내용을 자동으로 채움 */
+    private class DetectImage extends AsyncTask<Void, Void, YoloDetector.Result> {
+        private final Uri imageUri;
+        private Bitmap image;
+        private String error;
+
+        DetectImage(Uri imageUri) {
+            this.imageUri = imageUri;
+        }
+
+        @Override
+        protected void onPreExecute() {
+            if (uploadDetectResult != null) {
+                uploadDetectResult.setText("기기에서 인식 중...");
+            }
+        }
+
+        @Override
+        protected YoloDetector.Result doInBackground(Void... unused) {
+            try {
+                image = loadUploadImage(imageUri, 1600);
+                if (image == null) {
+                    error = "이미지를 읽을 수 없습니다";
+                    return null;
+                }
+                return YoloDetector.get(MainActivity.this).detect(image);
+            } catch (IOException | ai.onnxruntime.OrtException e) {
+                e.printStackTrace();
+                error = e.getMessage();
+                return null;
+            }
+        }
+
+        @Override
+        protected void onPostExecute(YoloDetector.Result result) {
+            // 그 사이 게시 화면이 닫혔거나 다른 사진을 골랐으면 이 결과는 버림
+            if (uploadDetectResult == null || !imageUri.equals(selectedImageUri)) {
+                return;
+            }
+            if (result == null) {
+                uploadDetectResult.setText("인식 실패: " + error);
+                return;
+            }
+            if (result.detections.isEmpty()) {
+                uploadDetectResult.setText("기기에서 인식 " + result.inferenceMs + "ms: 찾은 물체 없음");
+                return;
+            }
+            uploadPreview.setImageBitmap(drawBoxes(image, result.detections));
+            uploadDetectResult.setText("기기에서 인식 " + result.inferenceMs + "ms (서버 전송 없음): "
+                    + YoloPostprocess.countSummary(result.detections));
+            if (uploadTitle.getText().toString().trim().isEmpty()) {
+                uploadTitle.setText(result.detections.get(0).name());  // 점수가 가장 높은 물체
+            }
+            if (uploadText.getText().toString().trim().isEmpty()) {
+                uploadText.setText(YoloPostprocess.postText(result.detections));
+            }
+        }
+    }
+
+    private static Bitmap drawBoxes(Bitmap image, List<YoloPostprocess.Detection> detections) {
+        Bitmap copy = image.copy(Bitmap.Config.ARGB_8888, true);
+        Canvas canvas = new Canvas(copy);
+        float unit = Math.max(copy.getWidth(), copy.getHeight()) / 100f;
+        Paint box = new Paint();
+        box.setStyle(Paint.Style.STROKE);
+        box.setStrokeWidth(unit * 0.6f);
+        box.setColor(Color.rgb(255, 176, 32));
+        Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
+        label.setTextSize(unit * 3.2f);
+        label.setColor(Color.BLACK);
+        Paint labelBg = new Paint();
+        labelBg.setColor(Color.rgb(255, 176, 32));
+        for (YoloPostprocess.Detection d : detections) {
+            canvas.drawRect(d.x1, d.y1, d.x2, d.y2, box);
+            String text = String.format(java.util.Locale.US, "%s %.2f", d.name(), d.score);
+            float top = Math.max(0, d.y1 - unit * 4f);
+            canvas.drawRect(d.x1, top, d.x1 + label.measureText(text) + unit, top + unit * 4f, labelBg);
+            canvas.drawText(text, d.x1 + unit * 0.5f, top + unit * 3.1f, label);
+        }
+        return copy;
     }
 
     private static byte[] readAll(InputStream in) throws IOException {
@@ -636,7 +881,13 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 .setTitle("게시물 삭제")
                 .setMessage("'" + post.title + "' 게시물을 삭제할까요?")
                 .setNegativeButton("취소", null)
-                .setPositiveButton("삭제", (d, w) -> new DeletePost().execute(post.id))
+                .setPositiveButton("삭제", (d, w) -> {
+                    if (TextUtils.isEmpty(token)) {
+                        showLogin(() -> new DeletePost().execute(post.id));  // 삭제는 로그인이 필요
+                    } else {
+                        new DeletePost().execute(post.id);
+                    }
+                })
                 .show();
     }
 
@@ -667,6 +918,9 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 onClickDownload(null);
             } else if (code == HttpURLConnection.HTTP_FORBIDDEN) {
                 Toast.makeText(MainActivity.this, "작성자만 삭제할 수 있습니다 (403)", Toast.LENGTH_LONG).show();
+            } else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                logout();  // 서버에서 무효가 된 토큰은 지우고 다시 로그인
+                showLogin(null);
             } else {
                 Toast.makeText(MainActivity.this, "삭제 실패 (" + code + ")", Toast.LENGTH_LONG).show();
             }
