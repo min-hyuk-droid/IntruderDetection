@@ -55,12 +55,12 @@ application = get_wsgi_application()
 bash ~/IntruderDetection/PhotoBlogServer/deploy_pythonanywhere.sh
 ```
 
-최신 코드·라이브러리·DB·정적 파일을 반영하고, 토큰 두 개를 출력한 뒤 웹앱을 다시 불러온다.
+최신 코드·라이브러리·DB·정적 파일을 반영하고, 앱·YOLOv5 전용 사용자를 만든 뒤 웹앱을 다시 불러온다.
 
-| 사용자 | 토큰을 넣는 곳 |
+| 사용자 | 쓰는 방법 |
 |---|---|
-| `photoviewer` (앱 전용, 관리자 아님) | PhotoViewer `secrets.properties` → `REMOTE_TOKEN` |
-| `yolo` (YOLOv5 전용, 관리자 아님) | YOLOv5 `.env` → `BLOG_TOKEN` (`BLOG_HOST=https://sungmh.pythonanywhere.com`) |
+| `photoviewer` (앱 전용, 관리자 아님) | `python manage.py changepassword photoviewer` 로 비밀번호를 정하고 앱에서 로그인 |
+| `yolo` (YOLOv5 전용, 관리자 아님) | 출력된 토큰을 YOLOv5 `.env` → `BLOG_TOKEN` 에 넣음 (`BLOG_HOST=https://sungmh.pythonanywhere.com`) |
 
 Static files 매핑을 처음 추가했을 때는 Web 탭의 **Reload** 버튼을 한 번 눌러야 `/static/`, `/media/` 가 열린다.
 

@@ -1,6 +1,6 @@
-# PhotoBlogServer — Django 포토 블로그 서버
+# PhotoBlogServer — Django 이미지 블로그 서버
 
-강의자료 ch05 「모바일 앱으로 사용하는 기본 포토블로그」의 서버(Django + Django REST framework).
+강의자료 ch08 침입자 감시 시스템의 서버(Django + Django REST framework). YOLOv5 Edge 가 올린 검출 이미지를 웹과 앱으로 보여준다.
 ch03 이미지 블로그([web_blog](https://github.com/min-hyuk-droid/web_blog)) 코드를 이어받아 확장했다.
 
 ## 실행
@@ -11,7 +11,9 @@ venv\Scripts\activate              # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 python manage.py migrate
 python manage.py createsuperuser
-python manage.py drf_create_token <username>   # 앱(PhotoViewer)에서 쓸 토큰
+python manage.py create_app_user yolo          # YOLOv5 전용 사용자 토큰 출력 (YOLOv5/.env 의 BLOG_TOKEN)
+python manage.py create_app_user               # 앱 전용 사용자 photoviewer 생성
+python manage.py changepassword photoviewer    # 앱에서 로그인할 비밀번호
 python manage.py runserver
 ```
 
@@ -20,7 +22,7 @@ python manage.py runserver
 | 웹 블로그 | http://127.0.0.1:8000/ |
 | API Root | http://127.0.0.1:8000/api_root/ |
 | 게시물 API | http://127.0.0.1:8000/api_root/Post/ |
-| 토큰 발급 | `POST /api-token-auth/` (username, password) |
+| 토큰 발급 | `POST /api-token-auth/` (username, password). 같은 IP 에서 분당 5회까지, 초과하면 429 *(편의기능 보안)* |
 
 `ALLOWED_HOSTS` 에 `127.0.0.1`, `localhost`, `10.0.2.2`(Android 에뮬레이터), `.pythonanywhere.com` 이 등록되어 있다.
 
@@ -30,7 +32,7 @@ python manage.py runserver
 |---|---|---|
 | `GET` | 게시물 목록 — **JSON Array**, 최신 글 먼저, 이미지 절대 URL 포함 | 불필요 |
 | `GET ?search=키워드` | 제목/본문 검색 *(편의기능)* | 불필요 |
-| `POST` | 게시물 작성 — Multipart(Text + Image). 작성자는 토큰 사용자, 게시일 생략 시 현재 시각 | 필요 |
+| `POST` | 게시물 작성 — Multipart(Text + Image). 작성자는 토큰 사용자, 게시일 생략 시 현재 시각. 사진이 아니거나 5MB 초과면 400 *(편의기능 보안)* | 필요 |
 | `PUT/PATCH/DELETE /{id}/` | 수정/삭제 — **작성자 본인(또는 관리자)만** *(편의기능)*, 그 외 403. 웹 화면 글 수정도 같은 규칙 | 필요 |
 | `HEAD`, `OPTIONS` | 목록 응답의 `Allow: GET, POST, HEAD, OPTIONS` | — |
 

@@ -189,23 +189,13 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         serverAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(serverAdapter);
         // 마지막으로 고른 서버로 시작 (자동 동기화가 이 서버로 요청하도록 먼저 지정)
-        int saved = prefs.getInt(PREF_SERVER, 0);
-        if (saved < SERVER_URLS.length && !TextUtils.isEmpty(SERVER_URLS[saved])) {
-            site_url = SERVER_URLS[saved];
-        } else {
-            saved = 0;
-        }
+        int saved = Math.min(prefs.getInt(PREF_SERVER, 0), SERVER_URLS.length - 1);
+        site_url = SERVER_URLS[saved];
         useServer(saved);
         spinner.setSelection(saved);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (TextUtils.isEmpty(SERVER_URLS[position])) {
-                    Toast.makeText(MainActivity.this, "secrets.properties 에 서버 주소가 없습니다.",
-                            Toast.LENGTH_SHORT).show();
-                    spinner.setSelection(0);
-                    return;
-                }
                 boolean changed = !SERVER_URLS[position].equals(site_url);
                 site_url = SERVER_URLS[position];
                 useServer(position);
