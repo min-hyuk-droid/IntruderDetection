@@ -331,8 +331,63 @@ class CreateAppUserCommandTest(TestCase):
         self.assertEqual(client.delete(f'{API_URL}{post.pk}/').status_code, 403)
 
 
+@override_settings(MEDIA_ROOT=MEDIA_ROOT)
+class IntrusionAlertTest(MediaTestMixin, TestCase):
+    """침입 알림 API: YOLOv5 Edge 의 새 검출만, 번호 순서로"""
+    URL = API_URL + 'alerts/'
+
+    def setUp(self):
+        self.edge = User.objects.create_user('yolo', password='pw-12345')
+        self.app = User.objects.create_user('photoviewer', password='pw-12345')
+        self.first = Post.objects.create(author=self.edge, title='bottle', text='bottle,', image=make_image('a.jpg'))
+        self.app_post = Post.objects.create(author=self.app, title='여행', text='앱에서 올린 사진')
+        self.second = Post.objects.create(author=self.edge, title='person', text='person,', image=make_image('b.jpg'))
+        self.third = Post.objects.create(author=self.edge, title='cup', text='cup,', image=make_image('c.jpg'))
+        self.client = APIClient()
+
+    def ids(self, query=''):
+        res = self.client.get(self.URL + query)
+        self.assertEqual(res.status_code, 200)
+        return [p['id'] for p in res.json()]
+
+    def test_without_after_returns_latest_detection_only(self):
+        self.assertEqual(self.ids(), [self.third.id])
+
+    def test_after_returns_newer_detections_in_order(self):
+        self.assertEqual(self.ids(f'?after={self.first.id}'), [self.second.id, self.third.id])
+
+    def test_after_latest_returns_empty(self):
+        self.assertEqual(self.ids(f'?after={self.third.id}'), [])
+
+    def test_app_posts_are_not_alerted(self):
+        self.assertNotIn(self.app_post.id, self.ids('?after=0'))
+        self.assertEqual(self.ids('?after=0'), [self.first.id, self.second.id, self.third.id])
+
+    def test_no_detections_returns_empty(self):
+        Post.objects.filter(author=self.edge).delete()
+        self.assertEqual(self.ids(), [])
+
+    def test_invalid_after_is_rejected(self):
+        for value in ('abc', '-1', '1.5', ''):
+            res = self.client.get(self.URL, {'after': value})
+            self.assertEqual(res.status_code, 400, value)
+            self.assertIn('after', res.json())
+
+    def test_very_large_after_returns_empty(self):
+        self.assertEqual(self.ids('?after=' + '9' * 30), [])
+
+    def test_response_has_absolute_image_url(self):
+        image = self.client.get(self.URL).json()[0]['image']
+        self.assertTrue(image.startswith('http://testserver/media/'), image)
+
+    def test_read_only(self):
+        token = Token.objects.create(user=self.edge)
+        self.client.credentials(HTTP_AUTHORIZATION=f'JWT {token.key}')
+        self.assertEqual(self.client.post(self.URL, {}).status_code, 405)
+
+
 class LoginThrottleTest(TestCase):
-    """[편의기능 보안] 로그인은 1분에 5번까지, 6번째부터 429 (맞는 비밀번호여도 거절)"""
+    """[보안] 로그인은 1분에 5번까지, 6번째부터 429 (맞는 비밀번호여도 거절)"""
 
     def setUp(self):
         cache.clear()
@@ -361,7 +416,7 @@ class LoginThrottleTest(TestCase):
 
 @override_settings(MEDIA_ROOT=MEDIA_ROOT)
 class UploadValidationTest(MediaTestMixin, TestCase):
-    """[편의기능 보안] 사진이 아니거나 5MB 를 넘는 파일은 400, 게시물이 만들어지지 않음"""
+    """[보안] 사진이 아니거나 5MB 를 넘는 파일은 400, 게시물이 만들어지지 않음"""
 
     def setUp(self):
         user = User.objects.create_user('kiok', password='pw-12345')

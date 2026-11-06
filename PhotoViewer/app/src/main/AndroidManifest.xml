@@ -13,6 +13,11 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- [편의기능] 침입 알림: 알림 표시, 앱을 닫아도 서버를 확인하는 포그라운드 서비스 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -23,12 +28,18 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="stateHidden|adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".IntrusionMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- [편의기능] 카메라로 찍은 사진을 저장할 앱 전용 파일 경로를 카메라 앱에 넘겨주기 위한 FileProvider -->
         <provider

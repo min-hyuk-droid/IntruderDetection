@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.http import HttpResponseForbidden
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils import timezone
@@ -6,6 +7,9 @@ from .models import Post
 from .forms import PostForm
 from rest_framework import viewsets, filters, permissions
 from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
+from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from .serializers import PostSerializer
 from .permissions import IsAuthorOrReadOnly
@@ -59,7 +63,7 @@ class LoginRateThrottle(AnonRateThrottle):
 
 
 class ThrottledAuthToken(ObtainAuthToken):
-    # [편의기능 보안] /api-token-auth/ 로그인 시도 제한 (settings.py 의 login 비율, 초과하면 429)
+    # [보안] /api-token-auth/ 로그인 시도 제한 (settings.py 의 login 비율, 초과하면 429)
     throttle_classes = [LoginRateThrottle]
 
 
@@ -77,3 +81,17 @@ class BlogImages(viewsets.ModelViewSet):
         # 앱에서 게시일을 보내지 않으면 지금 시각으로 게시 (웹 목록에도 바로 보이도록)
         published = serializer.validated_data.get('published_date') or timezone.now()
         serializer.save(author=self.request.user, published_date=published)
+
+    @action(detail=False, methods=['get'])
+    def alerts(self, request):
+        # [편의기능] 침입 알림: YOLOv5 Edge 가 올린 검출만 돌려줌 (앱이 직접 올린 사진은 알리지 않음)
+        detections = Post.objects.filter(author__username=settings.EDGE_USERNAME)
+        after = request.query_params.get('after')
+        if after is None:
+            # 감시를 막 시작한 앱의 기준점: 가장 최근 검출 1개 (지난 검출을 한꺼번에 알리지 않도록)
+            posts = detections.order_by('-id')[:1]
+        elif after.isdecimal():
+            posts = detections.filter(id__gt=int(after)).order_by('id')
+        else:
+            raise ValidationError({'after': '게시물 번호(0 이상의 정수)를 입력하세요.'})
+        return Response(self.get_serializer(posts, many=True).data)

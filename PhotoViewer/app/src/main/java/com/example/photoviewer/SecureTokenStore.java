@@ -17,7 +17,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
 /**
- * [편의기능 보안] 로그인 토큰을 Android Keystore 키(AES-GCM, 기기 밖으로 꺼낼 수 없음)로 암호화해 저장한다.
+ * [보안] 로그인 토큰을 Android Keystore 키(AES-GCM, 기기 밖으로 꺼낼 수 없음)로 암호화해 저장한다.
  * 저장 파일(shared_prefs/secure_tokens.xml)에는 암호문만 남고, 앱(APK)에는 토큰이 들어 있지 않다.
  */
 public final class SecureTokenStore {

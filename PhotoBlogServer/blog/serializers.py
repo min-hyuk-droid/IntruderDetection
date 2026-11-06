@@ -16,7 +16,7 @@ class PostSerializer(serializers.ModelSerializer):
                   'created_date', 'published_date', 'image')
 
     def validate_image(self, image):
-        # [편의기능 보안] 큰 파일로 서버 저장 공간을 채우지 못하게 제한 (사진이 맞는지는 ImageField 가 Pillow 로 검사)
+        # [보안] 큰 파일로 서버 저장 공간을 채우지 못하게 제한 (사진이 맞는지는 ImageField 가 Pillow 로 검사)
         if image.size > MAX_IMAGE_BYTES:
             raise serializers.ValidationError('이미지는 5MB 이하만 올릴 수 있습니다.')
         return image

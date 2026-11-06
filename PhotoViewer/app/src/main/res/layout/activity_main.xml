@@ -41,18 +41,36 @@
             android:text="@string/search" />
     </LinearLayout>
 
-    <!-- [편의기능 보안] 로그인 상태: 누르면 로그인 / 로그아웃 -->
-    <TextView
-        android:id="@+id/textAccount"
+    <!-- [보안] 로그인 상태: 누르면 로그인 / 로그아웃 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:clickable="true"
-        android:focusable="true"
-        android:onClick="onClickAccount"
-        android:paddingHorizontal="12dp"
-        android:paddingVertical="6dp"
-        android:textColor="@color/accent_text"
-        android:textSize="14sp" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingEnd="8dp">
+
+        <TextView
+            android:id="@+id/textAccount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:clickable="true"
+            android:focusable="true"
+            android:onClick="onClickAccount"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
+            android:textColor="@color/accent_text"
+            android:textSize="14sp" />
+
+        <!-- [편의기능] 침입 알림 켜기 / 끄기 -->
+        <Button
+            android:id="@+id/btnMonitor"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:onClick="onClickMonitor"
+            android:text="@string/monitor_start" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/textView"

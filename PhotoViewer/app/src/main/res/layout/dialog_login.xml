@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- [편의기능 보안] 로그인: POST /api-token-auth/ → 토큰을 Keystore 로 암호화해 저장 -->
+<!-- [보안] 로그인: POST /api-token-auth/ → 토큰을 Keystore 로 암호화해 저장 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"

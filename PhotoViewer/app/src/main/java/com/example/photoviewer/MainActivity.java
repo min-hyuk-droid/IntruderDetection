@@ -1,6 +1,9 @@
 package com.example.photoviewer;
 
+import android.Manifest;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -10,6 +13,7 @@ import android.graphics.Paint;
 import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -33,6 +37,7 @@ import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -74,7 +79,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     CloadImage taskDownload;
     PutPost taskUpload;
 
-    // [편의기능 보안] 토큰은 앱에 넣지 않고, 로그인으로 받아 Keystore 로 암호화해 저장한 것을 읽어 씀
+    // [보안] 토큰은 앱에 넣지 않고, 로그인으로 받아 Keystore 로 암호화해 저장한 것을 읽어 씀
     String token = "";
     private SecureTokenStore tokenStore;
     private TextView textAccount;
@@ -109,6 +114,11 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     // [편의기능] 카메라로 찍어서 바로 게시
     private ActivityResultLauncher<Uri> takePhoto;
     private Uri cameraPhotoUri;
+    // [편의기능] 침입 알림: 감시 버튼, 알림 권한 요청, 알림을 눌러서 열 게시물 번호
+    private static final int NO_POST = -1;
+    private Button btnMonitor;
+    private ActivityResultLauncher<String> requestNotification;
+    private int pendingPostId = NO_POST;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -119,6 +129,16 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         editSearch = findViewById(R.id.editSearch);
         textAccount = findViewById(R.id.textAccount);
         tokenStore = new SecureTokenStore(this);
+        btnMonitor = findViewById(R.id.btnMonitor);
+
+        // [편의기능] 침입 알림: Android 13 이상은 알림 권한을 허용해야 알림이 보임
+        requestNotification = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+            if (Boolean.TRUE.equals(granted)) {
+                startMonitor();
+            } else {
+                Toast.makeText(this, "알림 권한이 없으면 침입 알림을 받을 수 없습니다.", Toast.LENGTH_LONG).show();
+            }
+        });
 
         // 이미지 선택 (Android Photo Picker, 저장소 권한 없이 사용 가능)
         pickImage = registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
@@ -142,6 +162,13 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 }
             }
         });
+
+        if (savedInstanceState == null && readAlertIntent(getIntent())) {
+            // 앱이 꺼져 있을 때 알림을 누름: 알림이 온 서버로 시작 (아래 자동 동기화 후 게시물을 엶)
+            getSharedPreferences("photoviewer", MODE_PRIVATE).edit()
+                    .putInt(PREF_SERVER, getIntent().getIntExtra(IntrusionMonitorService.EXTRA_SERVER_INDEX, 0))
+                    .apply();
+        }
 
         setupServerSpinner();
 
@@ -201,6 +228,9 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 useServer(position);
                 prefs.edit().putInt(PREF_SERVER, position).apply();
                 if (changed) {
+                    if (IntrusionMonitorService.running) {
+                        startMonitor();  // 감시 중이면 지금 보고 있는 서버를 감시
+                    }
                     // 이전 서버의 목록은 지우고(실패해도 다른 서버 글이 남아 보이지 않게) 바로 새 서버로 동기화
                     showImages(new ArrayList<>(), new ArrayList<>());
                     onClickDownload(null);
@@ -226,7 +256,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 : name + " 로그인됨 | 눌러서 로그아웃");
     }
 
-    // ------------------------------------------------------------------ [편의기능 보안] 로그인 / 로그아웃
+    // ------------------------------------------------------------------ [보안] 로그인 / 로그아웃
 
     public void onClickAccount(View v) {
         if (TextUtils.isEmpty(token)) {
@@ -349,6 +379,74 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         }
     }
 
+    // ------------------------------------------------------------------ [편의기능] 침입 알림
+
+    public void onClickMonitor(View v) {
+        if (IntrusionMonitorService.running) {
+            stopService(new Intent(this, IntrusionMonitorService.class));
+            btnMonitor.setText(R.string.monitor_start);
+            Toast.makeText(this, "감시를 중지했습니다.", Toast.LENGTH_SHORT).show();
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestNotification.launch(Manifest.permission.POST_NOTIFICATIONS);
+        } else {
+            startMonitor();
+        }
+    }
+
+    private void startMonitor() {
+        ContextCompat.startForegroundService(this, new Intent(this, IntrusionMonitorService.class)
+                .putExtra(IntrusionMonitorService.EXTRA_SERVER_URL, site_url)
+                .putExtra(IntrusionMonitorService.EXTRA_SERVER_INDEX, serverIndex)
+                .putExtra(IntrusionMonitorService.EXTRA_SERVER_NAME, SERVER_NAMES[serverIndex]));
+        btnMonitor.setText(R.string.monitor_stop);
+        Toast.makeText(this, SERVER_NAMES[serverIndex] + " 서버 감시를 시작했습니다.", Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {  // 알림의 [감시 중지] 로 멈췄을 수 있어 돌아올 때마다 버튼을 맞춤
+            btnMonitor.setText(IntrusionMonitorService.running ? R.string.monitor_stop : R.string.monitor_start);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (!readAlertIntent(intent)) {
+            return;
+        }
+        int alertServer = intent.getIntExtra(IntrusionMonitorService.EXTRA_SERVER_INDEX, serverIndex);
+        if (alertServer != serverIndex) {
+            ((Spinner) findViewById(R.id.spinnerServer)).setSelection(alertServer);  // 서버를 바꾸면 바로 동기화됨
+        } else {
+            onClickDownload(null);
+        }
+    }
+
+    /** 알림을 눌러 들어왔으면 열 게시물 번호를 기억해 둠 (동기화가 끝나면 openPendingPost 에서 엶) */
+    private boolean readAlertIntent(Intent intent) {
+        pendingPostId = intent.getIntExtra(IntrusionMonitorService.EXTRA_POST_ID, NO_POST);
+        return pendingPostId != NO_POST;
+    }
+
+    private void openPendingPost() {
+        if (pendingPostId == NO_POST) {
+            return;
+        }
+        int postId = pendingPostId;
+        pendingPostId = NO_POST;
+        for (int i = 0; i < postList.size(); i++) {
+            if (postList.get(i).id == postId) {
+                onClick(i);
+                return;
+            }
+        }
+        Toast.makeText(this, "이미 삭제된 게시물입니다.", Toast.LENGTH_LONG).show();
+    }
+
     // ------------------------------------------------------------------ 동기화 (강의자료 20~23p)
 
     public void onClickDownload(View v) {
@@ -465,6 +563,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
             swipeRefresh.setRefreshing(false);
             if (errorMessage != null) {
                 // 실패하면 이전에 받아 둔 목록은 그대로 두고 원인만 표시
+                pendingPostId = NO_POST;
                 setStatus(errorMessage);
                 Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_LONG).show();
                 return;
@@ -475,6 +574,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 setStatus(null);  // 성공하면 안내 문구 없이 목록만 보여줌
             }
             showImages(images, loadedPosts);
+            openPendingPost();
         }
     }
 

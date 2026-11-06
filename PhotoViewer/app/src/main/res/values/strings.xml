@@ -4,4 +4,6 @@
     <string name="upload">새로운 이미지 게시</string>
     <string name="search_hint">제목, 내용 검색</string>
     <string name="search">검색</string>
+    <string name="monitor_start">감시 시작</string>
+    <string name="monitor_stop">감시 중지</string>
 </resources>
