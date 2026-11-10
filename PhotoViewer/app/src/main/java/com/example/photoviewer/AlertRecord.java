@@ -26,7 +26,7 @@ final class AlertRecord {
                 imagePath, missed);
     }
 
-    /** 감시를 꺼 둔 사이 올라온 검출은 "놓친 침입" 으로 구분 */
+    /** 알림을 꺼 둔 사이 올라온 검출은 "놓친 침입" 으로 구분 */
     String heading() {
         return IntrusionAlerts.heading(title, missed);
     }

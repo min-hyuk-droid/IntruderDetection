@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * [편의기능] 침입 기록 (데이터 지속성): 받은 침입 알림과 서버별로 마지막에 확인한 게시물 번호를 기기에 저장한다.
  * SQLite DB + 앱 전용 폴더의 사진 파일이라, 앱을 껐다 켜도 남고 서버에 연결할 수 없어도 기록을 볼 수 있다.
- * 마지막 확인 번호가 남아 있으므로 감시를 다시 켜면 꺼 둔 사이의 검출도 알린다.
+ * 마지막 확인 번호가 남아 있으므로 알림을 다시 켜면 꺼 둔 사이의 검출도 알린다.
  */
 final class AlertStore extends SQLiteOpenHelper {
     /** 오래된 기록부터 지워 저장 공간을 제한 */
@@ -53,7 +53,7 @@ final class AlertStore extends SQLiteOpenHelper {
         // 첫 버전이라 바꿀 것이 없음
     }
 
-    /** 그 서버에서 마지막으로 확인한 게시물 번호. 처음 감시하는 서버면 NO_BASELINE */
+    /** 그 서버에서 마지막으로 확인한 게시물 번호. 처음 확인하는 서버면 NO_BASELINE */
     synchronized int loadAfterId(String server) {
         try (Cursor c = getReadableDatabase().query("monitor_state", new String[]{"after_id"},
                 "server = ?", new String[]{server}, null, null, null)) {

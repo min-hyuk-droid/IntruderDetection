@@ -31,7 +31,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | *(편의)* 자동 동기화 / 당겨서 새로고침 | 앱을 켜면 바로 동기화, 목록을 아래로 당기면 다시 받아옴 (`SwipeRefreshLayout`) |
 | 서버 선택 | 로컬(`http://10.0.2.2:8000`) ↔ 클라우드(PythonAnywhere) 스피너, 선택 값 저장, 바꾸면 바로 동기화 |
 | *(공통평가02 편의 ①)* 온디바이스 객체 인식 | 게시 화면에서 사진을 고르면 앱에 든 YOLOv5n(`assets/yolov5n.onnx`, onnxruntime-android)으로 기기 안에서 인식: 박스 표시, 인식 시간·물체 수 표시, 빈 제목·내용 자동 입력. 사진을 서버로 보내지 않고 인터넷 없이 동작 |
-| *(공통평가02 편의 ②)* 침입 알림 | [감시 시작] → 포그라운드 서비스(`IntrusionMonitorService`)가 앱을 닫아도 `GET /api_root/Post/alerts/?after=번호` 를 10초마다 확인 → 새 검출이 있으면 사진이 든 알림 → 누르면 그 게시물 상세보기. 서버가 꺼져도 다시 시도하고 상태를 표시. Android 15 의 실행 시간 제한(24시간 중 6시간)에 닿으면 알리고 멈춤. **침입 기록(데이터 지속성)**: 받은 알림을 기기 SQLite(`AlertStore`)와 사진 파일로 저장해 [기록] 화면에서 서버 연결 없이 보기, 서버에 연결할 수 없을 때 알림을 누르면 저장된 기록으로 상세보기, 서버별 마지막 확인 번호를 저장해 감시를 다시 켜면 꺼 둔 사이의 검출을 "놓친 침입"으로 알림, 최근 100건만 보관 |
+| *(공통평가02 편의 ②)* 침입 알림 | [알림 켜기] → 포그라운드 서비스(`IntrusionMonitorService`)가 앱을 닫아도 `GET /api_root/Post/alerts/?after=번호` 를 10초마다 확인 → 새 검출이 있으면 사진이 든 알림 → 누르면 그 게시물 상세보기. 서버가 꺼져도 다시 시도하고 상태를 표시. Android 15 의 실행 시간 제한(24시간 중 6시간)에 닿으면 알리고 멈춤. **침입 기록(데이터 지속성)**: 받은 알림을 기기 SQLite(`AlertStore`)와 사진 파일로 저장해 [기록] 화면에서 서버 연결 없이 보기, 서버에 연결할 수 없을 때 알림을 누르면 저장된 기록으로 상세보기, 서버별 마지막 확인 번호를 저장해 알림을 다시 켜면 꺼 둔 사이의 검출을 "놓친 침입"으로 알림, 최근 100건만 보관 |
 | 로그인·토큰 보호 | `POST /api-token-auth/` 로그인 → 토큰을 Android Keystore 키(AES-GCM)로 암호화해 저장(`SecureTokenStore`), 비밀번호는 저장하지 않음. 조회는 로그인 없이 가능, 글 올리기·삭제는 로그인 필요, 로그아웃하면 토큰 삭제, 서버 응답 400·429 안내 |
 
 모델 다시 만들기 (YOLOv5 폴더): `pip install onnx onnxscript` 후 `python export.py --weights yolov5n.pt --include onnx --imgsz 320`, 나온 파일을 `app/src/main/assets/` 로 복사.

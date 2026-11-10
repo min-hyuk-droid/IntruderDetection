@@ -38,7 +38,7 @@ final class IntrusionAlerts {
         return next;
     }
 
-    /** 감시를 꺼 둔 사이 올라온 검출(다시 켰을 때 처음 받은 것)은 "놓친 침입" 으로 구분 */
+    /** 알림을 꺼 둔 사이 올라온 검출(다시 켰을 때 처음 받은 것)은 "놓친 침입" 으로 구분 */
     static String heading(String title, boolean missed) {
         return (missed ? "놓친 침입: " : "침입 감지: ") + title;
     }

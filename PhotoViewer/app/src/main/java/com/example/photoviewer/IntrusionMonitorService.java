@@ -27,9 +27,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * [편의기능] 침입 알림: "감시 시작" 을 누르면 앱을 닫아도 서버의 alerts API 를 10초마다 확인하고,
+ * [편의기능] 침입 알림: "알림 켜기" 를 누르면 앱을 닫아도 서버의 alerts API 를 10초마다 확인하고,
  * YOLOv5 가 새로 올린 검출이 있으면 사진이 든 알림을 띄운다. 알림을 누르면 그 게시물을 연다.
- * 받은 알림과 마지막 확인 번호는 AlertStore 에 저장한다 (침입 기록, 감시를 다시 켜면 놓친 검출부터 알림).
+ * 받은 알림과 마지막 확인 번호는 AlertStore 에 저장한다 (침입 기록, 알림을 다시 켜면 놓친 검출부터 알림).
  */
 public class IntrusionMonitorService extends Service {
     static final String EXTRA_SERVER_URL = "server_url";
@@ -50,7 +50,7 @@ public class IntrusionMonitorService extends Service {
     private static final int CONNECT_TIMEOUT_MS = 8000;
     private static final int READ_TIMEOUT_MS = 15000;
 
-    /** 화면의 감시 버튼 표시에 사용 */
+    /** 화면의 알림 켜기/끄기 버튼 표시에 사용 */
     static volatile boolean running = false;
 
     private Thread worker;
@@ -76,10 +76,10 @@ public class IntrusionMonitorService extends Service {
         serverName = intent.getStringExtra(EXTRA_SERVER_NAME);
         serverKey = intent.getStringExtra(EXTRA_SERVER_KEY);
         createChannels();
-        ServiceCompat.startForeground(this, STATUS_ID, statusNotification(serverName + " 서버 감시 중 | 10초마다 확인"),
+        ServiceCompat.startForeground(this, STATUS_ID, statusNotification(serverName + " 서버 침입 알림 켜짐 | 10초마다 확인"),
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC : 0);
         running = true;
-        // 감시 중에 서버를 바꾸면 이전 서버 확인을 멈추고 새 서버를 처음부터 확인
+        // 알림이 켜진 채 서버를 바꾸면 이전 서버 확인을 멈추고 새 서버를 처음부터 확인
         stopWorker();
         worker = new Thread(() -> pollLoop(serverUrl));
         worker.start();
@@ -87,7 +87,7 @@ public class IntrusionMonitorService extends Service {
     }
 
     private void pollLoop(String serverUrl) {
-        // 기기에 남긴 마지막 확인 번호부터 이어서 확인: 감시를 꺼 둔 사이의 검출도 알림 ("놓친 침입")
+        // 기기에 남긴 마지막 확인 번호부터 이어서 확인: 알림을 꺼 둔 사이의 검출도 알림 ("놓친 침입")
         int afterId = store.loadAfterId(serverKey);
         boolean catchUp = afterId != IntrusionAlerts.NO_BASELINE;
         boolean connected = true;
@@ -95,9 +95,9 @@ public class IntrusionMonitorService extends Service {
             try {
                 List<Post> posts = IntrusionAlerts.parse(fetch(IntrusionAlerts.url(serverUrl, afterId)));
                 if (Thread.currentThread().isInterrupted()) {
-                    return;  // 응답을 기다리는 사이 감시를 멈췄거나 서버를 바꿈
+                    return;  // 응답을 기다리는 사이 알림을 껐거나 서버를 바꿈
                 }
-                if (afterId != IntrusionAlerts.NO_BASELINE) {  // 처음 감시하는 서버의 첫 검출은 기준점이라 알리지 않음
+                if (afterId != IntrusionAlerts.NO_BASELINE) {  // 처음 확인하는 서버의 첫 검출은 기준점이라 알리지 않음
                     for (Post post : posts) {
                         notifyAlert(post, catchUp);
                     }
@@ -106,7 +106,7 @@ public class IntrusionMonitorService extends Service {
                 store.saveAfterId(serverKey, afterId);
                 catchUp = false;
                 if (!connected) {
-                    updateStatus(serverName + " 서버 감시 중 | 10초마다 확인");
+                    updateStatus(serverName + " 서버 침입 알림 켜짐 | 10초마다 확인");
                     connected = true;
                 }
             } catch (IOException | JSONException e) {
@@ -114,7 +114,7 @@ public class IntrusionMonitorService extends Service {
                 if (Thread.currentThread().isInterrupted()) {
                     return;
                 }
-                if (connected) {  // 서버가 잠시 꺼져도 감시는 멈추지 않고 다시 시도
+                if (connected) {  // 서버가 잠시 꺼져도 확인을 멈추지 않고 다시 시도
                     updateStatus(serverName + " 서버에 연결할 수 없습니다 | 다시 시도 중");
                     connected = false;
                 }
@@ -197,7 +197,7 @@ public class IntrusionMonitorService extends Service {
         Intent stop = new Intent(this, IntrusionMonitorService.class).setAction(ACTION_STOP);
         return new NotificationCompat.Builder(this, CHANNEL_STATUS)
                 .setSmallIcon(R.drawable.ic_intrusion)
-                .setContentTitle("침입자 감시")
+                .setContentTitle("침입 알림")
                 .setContentText(text)
                 .setGroup(GROUP_STATUS)
                 .setOngoing(true)
@@ -222,7 +222,7 @@ public class IntrusionMonitorService extends Service {
     private void createChannels() {
         NotificationManagerCompat manager = NotificationManagerCompat.from(this);
         manager.createNotificationChannel(new NotificationChannelCompat.Builder(
-                CHANNEL_STATUS, NotificationManagerCompat.IMPORTANCE_LOW).setName("감시 상태").build());
+                CHANNEL_STATUS, NotificationManagerCompat.IMPORTANCE_LOW).setName("침입 알림 상태").build());
         manager.createNotificationChannel(new NotificationChannelCompat.Builder(
                 CHANNEL_ALERT, NotificationManagerCompat.IMPORTANCE_HIGH).setName("침입 알림").build());
     }
@@ -239,8 +239,8 @@ public class IntrusionMonitorService extends Service {
     public void onTimeout(int startId, int fgsType) {
         notifyIfAllowed(ENDED_ID, new NotificationCompat.Builder(this, CHANNEL_ALERT)
                 .setSmallIcon(R.drawable.ic_intrusion)
-                .setContentTitle("침입자 감시가 멈췄습니다")
-                .setContentText("Android 실행 시간 제한(6시간)에 닿았습니다. 앱에서 다시 시작하세요.")
+                .setContentTitle("침입 알림이 꺼졌습니다")
+                .setContentText("Android 실행 시간 제한(6시간)에 닿았습니다. 앱에서 다시 켜세요.")
                 .build());
         stopSelf();
     }

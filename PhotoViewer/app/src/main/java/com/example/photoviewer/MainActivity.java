@@ -115,7 +115,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     // [편의기능] 카메라로 찍어서 바로 게시
     private ActivityResultLauncher<Uri> takePhoto;
     private Uri cameraPhotoUri;
-    // [편의기능] 침입 알림: 감시 버튼, 알림 권한 요청, 알림을 눌러서 열 게시물 번호
+    // [편의기능] 침입 알림: 알림 켜기/끄기 버튼, 알림 권한 요청, 알림을 눌러서 열 게시물 번호
     private static final int NO_POST = -1;
     private Button btnMonitor;
     private ActivityResultLauncher<String> requestNotification;
@@ -233,7 +233,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 prefs.edit().putInt(PREF_SERVER, position).apply();
                 if (changed) {
                     if (IntrusionMonitorService.running) {
-                        startMonitor();  // 감시 중이면 지금 보고 있는 서버를 감시
+                        startMonitor();  // 알림이 켜져 있으면 지금 보고 있는 서버로 바꿔 확인
                     }
                     // 이전 서버의 목록은 지우고(실패해도 다른 서버 글이 남아 보이지 않게) 바로 새 서버로 동기화
                     showImages(new ArrayList<>(), new ArrayList<>());
@@ -389,7 +389,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         if (IntrusionMonitorService.running) {
             stopService(new Intent(this, IntrusionMonitorService.class));
             btnMonitor.setText(R.string.monitor_start);
-            Toast.makeText(this, "감시를 중지했습니다.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "침입 알림을 껐습니다.", Toast.LENGTH_SHORT).show();
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
@@ -406,13 +406,13 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
                 .putExtra(IntrusionMonitorService.EXTRA_SERVER_NAME, SERVER_NAMES[serverIndex])
                 .putExtra(IntrusionMonitorService.EXTRA_SERVER_KEY, SERVER_KEYS[serverIndex]));
         btnMonitor.setText(R.string.monitor_stop);
-        Toast.makeText(this, SERVER_NAMES[serverIndex] + " 서버 감시를 시작했습니다.", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, SERVER_NAMES[serverIndex] + " 서버 침입 알림을 켰습니다.", Toast.LENGTH_SHORT).show();
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {  // 알림의 [감시 중지] 로 멈췄을 수 있어 돌아올 때마다 버튼을 맞춤
+        if (hasFocus) {  // 알림의 [알림 끄기] 로 멈췄을 수 있어 돌아올 때마다 버튼을 맞춤
             btnMonitor.setText(IntrusionMonitorService.running ? R.string.monitor_stop : R.string.monitor_start);
         }
     }
