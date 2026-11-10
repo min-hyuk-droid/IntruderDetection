@@ -29,11 +29,13 @@ import java.util.List;
 /**
  * [편의기능] 침입 알림: "감시 시작" 을 누르면 앱을 닫아도 서버의 alerts API 를 10초마다 확인하고,
  * YOLOv5 가 새로 올린 검출이 있으면 사진이 든 알림을 띄운다. 알림을 누르면 그 게시물을 연다.
+ * 받은 알림과 마지막 확인 번호는 AlertStore 에 저장한다 (침입 기록, 감시를 다시 켜면 놓친 검출부터 알림).
  */
 public class IntrusionMonitorService extends Service {
     static final String EXTRA_SERVER_URL = "server_url";
     static final String EXTRA_SERVER_INDEX = "server_index";
     static final String EXTRA_SERVER_NAME = "server_name";
+    static final String EXTRA_SERVER_KEY = "server_key";
     static final String EXTRA_POST_ID = "alert_post_id";
     private static final String ACTION_STOP = "com.example.photoviewer.STOP_MONITOR";
     private static final String CHANNEL_STATUS = "monitor_status";
@@ -54,6 +56,14 @@ public class IntrusionMonitorService extends Service {
     private Thread worker;
     private int serverIndex;
     private String serverName;
+    private String serverKey;
+    private AlertStore store;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        store = AlertStore.get(this);
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -64,6 +74,7 @@ public class IntrusionMonitorService extends Service {
         String serverUrl = intent.getStringExtra(EXTRA_SERVER_URL);
         serverIndex = intent.getIntExtra(EXTRA_SERVER_INDEX, 0);
         serverName = intent.getStringExtra(EXTRA_SERVER_NAME);
+        serverKey = intent.getStringExtra(EXTRA_SERVER_KEY);
         createChannels();
         ServiceCompat.startForeground(this, STATUS_ID, statusNotification(serverName + " 서버 감시 중 | 10초마다 확인"),
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC : 0);
@@ -76,7 +87,9 @@ public class IntrusionMonitorService extends Service {
     }
 
     private void pollLoop(String serverUrl) {
-        int afterId = IntrusionAlerts.NO_BASELINE;
+        // 기기에 남긴 마지막 확인 번호부터 이어서 확인: 감시를 꺼 둔 사이의 검출도 알림 ("놓친 침입")
+        int afterId = store.loadAfterId(serverKey);
+        boolean catchUp = afterId != IntrusionAlerts.NO_BASELINE;
         boolean connected = true;
         while (!Thread.currentThread().isInterrupted()) {
             try {
@@ -84,12 +97,14 @@ public class IntrusionMonitorService extends Service {
                 if (Thread.currentThread().isInterrupted()) {
                     return;  // 응답을 기다리는 사이 감시를 멈췄거나 서버를 바꿈
                 }
-                if (afterId != IntrusionAlerts.NO_BASELINE) {  // 처음 받은 검출은 기준점이라 알리지 않음
+                if (afterId != IntrusionAlerts.NO_BASELINE) {  // 처음 감시하는 서버의 첫 검출은 기준점이라 알리지 않음
                     for (Post post : posts) {
-                        notifyAlert(post);
+                        notifyAlert(post, catchUp);
                     }
                 }
                 afterId = IntrusionAlerts.nextAfterId(posts, afterId);
+                store.saveAfterId(serverKey, afterId);
+                catchUp = false;
                 if (!connected) {
                     updateStatus(serverName + " 서버 감시 중 | 10초마다 확인");
                     connected = true;
@@ -152,14 +167,14 @@ public class IntrusionMonitorService extends Service {
         }
     }
 
-    private void notifyAlert(Post post) {
+    private void notifyAlert(Post post, boolean missed) {
         Intent open = new Intent(this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(EXTRA_POST_ID, post.id)
                 .putExtra(EXTRA_SERVER_INDEX, serverIndex);
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ALERT)
                 .setSmallIcon(R.drawable.ic_intrusion)
-                .setContentTitle(IntrusionAlerts.title(post))
+                .setContentTitle(IntrusionAlerts.title(post, missed))
                 .setContentText(IntrusionAlerts.message(post))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_EVENT)
@@ -168,6 +183,7 @@ public class IntrusionMonitorService extends Service {
                 .setContentIntent(PendingIntent.getActivity(this, post.id, open,
                         PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE));
         Bitmap image = downloadImage(post.imageUrl);
+        store.save(serverKey, post, image, missed);  // 서버에 연결할 수 없어도 볼 수 있게 기기에 먼저 저장
         if (image != null) {
             builder.setLargeIcon(image).setStyle(new NotificationCompat.BigPictureStyle()
                     .bigPicture(image)

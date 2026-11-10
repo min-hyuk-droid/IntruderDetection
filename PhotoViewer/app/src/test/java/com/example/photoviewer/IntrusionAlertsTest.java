@@ -73,7 +73,21 @@ public class IntrusionAlertsTest {
     @Test
     public void test_title_and_message() throws JSONException {
         Post post = post(84, "bottle", "person, bottle, ");
-        assertEquals("침입 감지: bottle", IntrusionAlerts.title(post));
+        assertEquals("침입 감지: bottle", IntrusionAlerts.title(post, false));
         assertEquals("person, bottle | 2026-11-06 14:02", IntrusionAlerts.message(post));
+    }
+
+    @Test
+    public void test_missed_detection_title() throws JSONException {
+        assertEquals("놓친 침입: bus", IntrusionAlerts.title(post(16, "bus", "person, bus,"), true));
+    }
+
+    @Test
+    public void test_record_from_post() throws JSONException {
+        AlertRecord record = AlertRecord.of("cloud", post(16, "bus", "person, bus, "), "/data/alerts/cloud_16.jpg", true);
+        assertEquals("놓친 침입: bus", record.heading());
+        assertEquals("person, bus", record.objects);
+        assertEquals("클라우드 16번 | 2026-11-06 14:02", record.meta("클라우드"));
+        assertEquals("/data/alerts/cloud_16.jpg", record.imagePath);
     }
 }

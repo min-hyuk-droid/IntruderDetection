@@ -38,16 +38,26 @@ final class IntrusionAlerts {
         return next;
     }
 
-    static String title(Post post) {
-        return "침입 감지: " + post.title;
+    /** 감시를 꺼 둔 사이 올라온 검출(다시 켰을 때 처음 받은 것)은 "놓친 침입" 으로 구분 */
+    static String heading(String title, boolean missed) {
+        return (missed ? "놓친 침입: " : "침입 감지: ") + title;
     }
 
-    /** "person, bottle," -> "person, bottle | 2026-11-06 14:02" */
-    static String message(Post post) {
+    static String title(Post post, boolean missed) {
+        return heading(post.title, missed);
+    }
+
+    /** "person, bottle," -> "person, bottle" */
+    static String objects(Post post) {
         String objects = post.text.trim();
         if (objects.endsWith(",")) {
             objects = objects.substring(0, objects.length() - 1);
         }
-        return objects + " | " + post.displayDate();
+        return objects;
+    }
+
+    /** "person, bottle," -> "person, bottle | 2026-11-06 14:02" */
+    static String message(Post post) {
+        return objects(post) + " | " + post.displayDate();
     }
 }

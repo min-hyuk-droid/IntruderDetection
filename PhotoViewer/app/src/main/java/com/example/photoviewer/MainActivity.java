@@ -40,6 +40,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
@@ -119,6 +120,8 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
     private Button btnMonitor;
     private ActivityResultLauncher<String> requestNotification;
     private int pendingPostId = NO_POST;
+    // [편의기능] 침입 기록: 기기에 저장된 알림 (서버 연결 없이 보기)
+    private AlertStore alertStore;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,6 +133,7 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         textAccount = findViewById(R.id.textAccount);
         tokenStore = new SecureTokenStore(this);
         btnMonitor = findViewById(R.id.btnMonitor);
+        alertStore = AlertStore.get(this);
 
         // [편의기능] 침입 알림: Android 13 이상은 알림 권한을 허용해야 알림이 보임
         requestNotification = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -399,7 +403,8 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
         ContextCompat.startForegroundService(this, new Intent(this, IntrusionMonitorService.class)
                 .putExtra(IntrusionMonitorService.EXTRA_SERVER_URL, site_url)
                 .putExtra(IntrusionMonitorService.EXTRA_SERVER_INDEX, serverIndex)
-                .putExtra(IntrusionMonitorService.EXTRA_SERVER_NAME, SERVER_NAMES[serverIndex]));
+                .putExtra(IntrusionMonitorService.EXTRA_SERVER_NAME, SERVER_NAMES[serverIndex])
+                .putExtra(IntrusionMonitorService.EXTRA_SERVER_KEY, SERVER_KEYS[serverIndex]));
         btnMonitor.setText(R.string.monitor_stop);
         Toast.makeText(this, SERVER_NAMES[serverIndex] + " 서버 감시를 시작했습니다.", Toast.LENGTH_SHORT).show();
     }
@@ -445,6 +450,57 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
             }
         }
         Toast.makeText(this, "이미 삭제된 게시물입니다.", Toast.LENGTH_LONG).show();
+    }
+
+    public void onClickHistory(View v) {
+        List<AlertRecord> records = alertStore.list();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle("침입 기록 " + records.size() + "건 (기기에 저장)")
+                .setPositiveButton("닫기", null);
+        if (records.isEmpty()) {
+            builder.setMessage("아직 받은 침입 알림이 없습니다.");
+        } else {
+            RecyclerView list = new RecyclerView(this);
+            list.setLayoutManager(new LinearLayoutManager(this));
+            list.setAdapter(new AlertHistoryAdapter(records, this::serverName, this::showAlertRecord));
+            builder.setView(list).setNegativeButton("기록 지우기", (d, w) -> confirmClearHistory());
+        }
+        builder.show();
+    }
+
+    private void confirmClearHistory() {
+        new AlertDialog.Builder(this)
+                .setTitle("침입 기록 지우기")
+                .setMessage("기기에 저장된 침입 기록과 사진을 모두 지울까요?")
+                .setNegativeButton("취소", null)
+                .setPositiveButton("지우기", (d, w) -> {
+                    alertStore.clearRecords();
+                    Toast.makeText(this, "침입 기록을 지웠습니다.", Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
+    /** 저장된 사진·물체·시각을 서버 연결 없이 보여 줌 */
+    private void showAlertRecord(AlertRecord record) {
+        View view = getLayoutInflater().inflate(R.layout.dialog_detail, null);
+        ((ImageView) view.findViewById(R.id.imageDetail)).setImageBitmap(
+                record.imagePath == null ? null : BitmapFactory.decodeFile(record.imagePath));
+        ((TextView) view.findViewById(R.id.textDetailMeta)).setText(record.meta(serverName(record.server)) + "  |  기기에 저장된 기록");
+        ((TextView) view.findViewById(R.id.textDetailBody)).setText(record.objects);
+        new AlertDialog.Builder(this)
+                .setTitle(record.heading())
+                .setView(view)
+                .setPositiveButton("닫기", null)
+                .show();
+    }
+
+    private String serverName(String key) {
+        for (int i = 0; i < SERVER_KEYS.length; i++) {
+            if (SERVER_KEYS[i].equals(key)) {
+                return SERVER_NAMES[i];
+            }
+        }
+        return key;
     }
 
     // ------------------------------------------------------------------ 동기화 (강의자료 20~23p)
@@ -563,8 +619,14 @@ public class MainActivity extends AppCompatActivity implements ImageAdapter.OnPo
             swipeRefresh.setRefreshing(false);
             if (errorMessage != null) {
                 // 실패하면 이전에 받아 둔 목록은 그대로 두고 원인만 표시
+                AlertRecord saved = pendingPostId == NO_POST ? null
+                        : alertStore.find(SERVER_KEYS[serverIndex], pendingPostId);
                 pendingPostId = NO_POST;
                 setStatus(errorMessage);
+                if (saved != null) {  // [편의기능] 알림을 눌렀는데 서버에 연결할 수 없으면 기기에 저장된 기록으로 보여 줌
+                    showAlertRecord(saved);
+                    return;
+                }
                 Toast.makeText(MainActivity.this, errorMessage, Toast.LENGTH_LONG).show();
                 return;
             }

@@ -62,6 +62,16 @@
             android:textColor="@color/accent_text"
             android:textSize="14sp" />
 
+        <!-- [편의기능] 침입 기록 보기 (기기에 저장된 알림) -->
+        <Button
+            android:id="@+id/btnHistory"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:onClick="onClickHistory"
+            android:text="@string/alert_history" />
+
         <!-- [편의기능] 침입 알림 켜기 / 끄기 -->
         <Button
             android:id="@+id/btnMonitor"
